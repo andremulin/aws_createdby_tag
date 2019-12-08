@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Formation to Create a Lambda Function to tag AWS resources with createdBy tag.
+#                  _                          _ _                     _ _   _           _     
+#                 | |                        | (_)        ____       (_) | | |         | |    
+#   __ _ _ __   __| |_ __ ___ _ __ ___  _   _| |_ _ __   / __ \  __ _ _| |_| |__  _   _| |__  
+#  / _` | '_ \ / _` | '__/ _ \ '_ ` _ \| | | | | | '_ \ / / _` |/ _` | | __| '_ \| | | | '_ \ 
+# | (_| | | | | (_| | | |  __/ | | | | | |_| | | | | | | | (_| | (_| | | |_| | | | |_| | |_) |
+#  \__,_|_| |_|\__,_|_|  \___|_| |_| |_|\__,_|_|_|_| |_|\ \__,_|\__, |_|\__|_| |_|\__,_|_.__/ 
+#                                                        \____/  __/ |                        
+#                                                               |___/ 
+Parameters:
+  Stackname:
+    Type: String
+    Default: createdby-tag
+
+Resources:
+  CreatedByTagLambda:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Ref Stackname
+      Description: Lambda to notification to notification in case of error in DLM.
+      Handler: 
+        !Join
+          - ''
+          - - !Ref Stackname
+            - '.lambda_handler'
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 10
+      Description: Lambda to create tag createdby in EC2 and RDS
+      Role: 'arn:aws:iam::222222222222:role/iam-role-lambda'
+      Code:
+        S3Bucket: lambda-storage
+        S3Key: Lambda/createdby-tag.zip
+      Tags: 
+        -
+          Key: environment
+          Value: dev
+
+  CreatedByTagRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Rule to monitoring creation of new EC2 and RDS"
+      Name: 
+        !Join
+          - ''
+          - - 'cw-event-'
+            - !Ref Stackname
+      EventPattern:
+          detail: 
+              eventName:
+              - "RunInstances"
+              - "CreateDBInstance"
+              eventSource:
+              - "ec2.amazonaws.com"
+              - "rds.amazonaws.com"
+      State: "ENABLED"
+      Targets: 
+          - 
+            Arn: 
+              Fn::GetAtt:
+              - "CreatedByTagLambda"
+              - "Arn"
+            Id: "TargetFunctionV1"
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: 
+          Ref: "CreatedByTagLambda"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+          Fn::GetAtt: 
+          - "CreatedByTagRule"
+          - "Arn" 
